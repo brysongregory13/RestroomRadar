@@ -4,8 +4,10 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -13,7 +15,8 @@ import { ExploreStackParamList } from '../../navigation/types';
 import { Restroom } from '../../types/Restroom';
 import { Review } from '../../types/Review';
 import { getRestroomById } from '../../services/restroomService';
-import { getReviews } from '../../services/reviewService';
+import { getReviews, addReview } from '../../services/reviewService';
+import { useAuth } from '../../hooks/useAuth';
 import { StarRating } from '../../components/StarRating';
 import { BadgePill } from '../../components/BadgePill';
 import { InfoCell } from '../../components/InfoCell';
@@ -32,9 +35,14 @@ const ACCESS_LABELS: Record<string, string> = {
 
 export function DetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
+  const { user } = useAuth();
   const [restroom, setRestroom] = useState<Restroom | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -44,6 +52,30 @@ export function DetailScreen({ route, navigation }: Props) {
       setLoading(false);
     })();
   }, [id]);
+
+  async function handleSubmitReview() {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to leave a review.');
+      return;
+    }
+    if (!reviewText.trim()) {
+      Alert.alert('Missing text', 'Please write something before submitting.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const displayName = user.displayName ?? user.email ?? 'Anonymous';
+      await addReview(id, user.uid, displayName, reviewRating, reviewText.trim());
+      const updated = await getReviews(id);
+      setReviews(updated);
+      setReviewText('');
+      setReviewRating(5);
+    } catch (e: unknown) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to submit review.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -66,11 +98,17 @@ export function DetailScreen({ route, navigation }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Photo banner */}
         <View style={styles.photoBanner}>
-          <Text style={styles.photoPlaceholder}>🚻</Text>
+          {restroom.photos.length > 0 ? (
+            <Text style={styles.photoPlaceholder}>📷</Text>
+          ) : (
+            <Text style={styles.photoPlaceholder}>🚻</Text>
+          )}
         </View>
 
         <View style={styles.body}>
+          {/* Name & status */}
           <View style={styles.nameRow}>
             <Text style={styles.name}>{restroom.name}</Text>
             <Text style={[styles.status, { color: open ? Colors.success : Colors.danger }]}>
@@ -79,6 +117,7 @@ export function DetailScreen({ route, navigation }: Props) {
           </View>
           <Text style={styles.address}>{restroom.address}</Text>
 
+          {/* Rating */}
           <View style={styles.ratingRow}>
             <StarRating rating={restroom.avgRating} size={18} />
             <Text style={styles.ratingText}>
@@ -86,6 +125,7 @@ export function DetailScreen({ route, navigation }: Props) {
             </Text>
           </View>
 
+          {/* Info grid */}
           <View style={styles.infoGrid}>
             <InfoCell
               label="Gender"
@@ -105,6 +145,7 @@ export function DetailScreen({ route, navigation }: Props) {
             <InfoCell label="Status" value={open ? 'Open Now' : 'Closed'} />
           </View>
 
+          {/* Amenities */}
           {restroom.amenities.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Amenities</Text>
@@ -125,6 +166,7 @@ export function DetailScreen({ route, navigation }: Props) {
             </View>
           )}
 
+          {/* Description */}
           {restroom.description ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>About</Text>
@@ -132,6 +174,7 @@ export function DetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
+          {/* Actions */}
           <View style={styles.actionsRow}>
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnOutline]}
@@ -147,8 +190,47 @@ export function DetailScreen({ route, navigation }: Props) {
             </TouchableOpacity>
           </View>
 
+          {/* Write a review */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Reviews</Text>
+            <Text style={styles.sectionTitle}>Leave a Review</Text>
+            {user ? (
+              <View style={styles.reviewForm}>
+                <StarRating rating={reviewRating} size={28} interactive onRate={setReviewRating} />
+                <TextInput
+                  style={styles.reviewInput}
+                  placeholder="Share your experience…"
+                  placeholderTextColor={Colors.textHint}
+                  value={reviewText}
+                  onChangeText={setReviewText}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+                <TouchableOpacity
+                  style={[styles.submitReviewBtn, submitting && styles.submitReviewBtnDisabled]}
+                  onPress={handleSubmitReview}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.submitReviewBtnText}>Submit Review</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.signInPrompt}
+                onPress={() => navigation.getParent()?.navigate('Auth')}
+              >
+                <Text style={styles.signInPromptText}>Sign in to leave a review →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Reviews */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Reviews ({reviews.length})</Text>
             {reviews.length === 0 ? (
               <Text style={styles.noReviews}>No reviews yet. Be the first!</Text>
             ) : (
@@ -187,7 +269,11 @@ const styles = StyleSheet.create({
     marginRight: Theme.spacing.sm,
   },
   status: { fontSize: Theme.typography.fontSizeBase, fontWeight: Theme.typography.weightSemibold },
-  address: { fontSize: Theme.typography.fontSizeBase, color: Colors.textSecondary, marginBottom: Theme.spacing.md },
+  address: {
+    fontSize: Theme.typography.fontSizeBase,
+    color: Colors.textSecondary,
+    marginBottom: Theme.spacing.md,
+  },
   ratingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Theme.spacing.lg },
   ratingText: { fontSize: Theme.typography.fontSizeBase, color: Colors.textSecondary, marginLeft: 8 },
   infoGrid: { flexDirection: 'row', marginHorizontal: -4 },
@@ -199,10 +285,60 @@ const styles = StyleSheet.create({
     marginBottom: Theme.spacing.md,
   },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  description: { fontSize: Theme.typography.fontSizeBase, color: Colors.textSecondary, lineHeight: 22 },
-  actionsRow: { flexDirection: 'row', gap: Theme.spacing.md, marginTop: Theme.spacing.xl },
-  actionBtn: { flex: 1, paddingVertical: 12, borderRadius: Theme.radius.pill, alignItems: 'center' },
+  description: {
+    fontSize: Theme.typography.fontSizeBase,
+    color: Colors.textSecondary,
+    lineHeight: 22,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: Theme.spacing.md,
+    marginTop: Theme.spacing.xl,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: Theme.radius.pill,
+    alignItems: 'center',
+  },
   actionBtnOutline: { borderWidth: 1.5, borderColor: Colors.border },
   actionBtnText: { fontSize: Theme.typography.fontSizeBase, fontWeight: Theme.typography.weightSemibold },
   noReviews: { color: Colors.textHint, fontStyle: 'italic' },
+  reviewForm: { gap: Theme.spacing.md },
+  reviewInput: {
+    backgroundColor: Colors.background,
+    borderRadius: Theme.radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: 10,
+    fontSize: Theme.typography.fontSizeBase,
+    color: Colors.textPrimary,
+    minHeight: 80,
+  },
+  submitReviewBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: Theme.radius.pill,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  submitReviewBtnDisabled: { opacity: 0.6 },
+  submitReviewBtnText: {
+    color: '#fff',
+    fontWeight: Theme.typography.weightBold,
+    fontSize: Theme.typography.fontSizeBase,
+  },
+  signInPrompt: {
+    paddingVertical: Theme.spacing.md,
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: Theme.radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  signInPromptText: {
+    color: Colors.primary,
+    fontWeight: Theme.typography.weightSemibold,
+    fontSize: Theme.typography.fontSizeBase,
+  },
 });

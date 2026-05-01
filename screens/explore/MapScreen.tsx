@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -19,6 +20,7 @@ import { RestroomPin } from '../../components/RestroomPin';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 import { distanceMiles } from '../../services/geoService';
+import { geocodeAddress } from '../../services/geocodingService';
 
 type Props = NativeStackScreenProps<ExploreStackParamList, 'Map'>;
 
@@ -33,6 +35,10 @@ export function MapScreen({ navigation }: Props) {
   const mapRef = useRef<MapView>(null);
   const lastFetchCenter = useRef<{ lat: number; lng: number } | null>(null);
   const [mapReady, setMapReady] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const handleRegionChangeComplete = useCallback(
     (region: Region) => {
@@ -55,6 +61,26 @@ export function MapScreen({ navigation }: Props) {
     [refetch]
   );
 
+  async function handleSearch() {
+    if (!searchQuery.trim()) return;
+    setSearchLoading(true);
+    try {
+      const result = await geocodeAddress(searchQuery.trim());
+      if (result) {
+        mapRef.current?.animateToRegion({
+          latitude: result.lat,
+          longitude: result.lng,
+          latitudeDelta: DELTA,
+          longitudeDelta: DELTA,
+        });
+        refetch(result.lat, result.lng);
+        setSearchQuery(result.formattedAddress);
+      }
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
   const initialRegion =
     lat !== null && lng !== null
       ? { latitude: lat, longitude: lng, latitudeDelta: DELTA, longitudeDelta: DELTA }
@@ -64,6 +90,7 @@ export function MapScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.surface} />
 
+      {/* Top Bar */}
       <View style={styles.topBar}>
         <Text style={styles.appName}>RestroomRadar</Text>
         <View style={styles.topBarActions}>
@@ -82,6 +109,37 @@ export function MapScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search location or address…"
+            placeholderTextColor={Colors.textHint}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
+              <Text style={styles.clearBtnText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {searchLoading && (
+          <ActivityIndicator
+            size="small"
+            color={Colors.primary}
+            style={styles.searchSpinner}
+          />
+        )}
+      </View>
+
+      {/* Map */}
       <View style={styles.mapContainer}>
         {locLoading ? (
           <View style={styles.centered}>
@@ -110,6 +168,7 @@ export function MapScreen({ navigation }: Props) {
           </MapView>
         )}
 
+        {/* Map/List toggle */}
         <View style={styles.toggleContainer}>
           <View style={styles.toggle}>
             <View style={[styles.toggleOption, styles.toggleActive]}>
@@ -124,12 +183,21 @@ export function MapScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {restroomsLoading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="small" color={Colors.primary} />
+        {/* Pin count badge */}
+        {!restroomsLoading && restrooms.length > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{restrooms.length} nearby</Text>
           </View>
         )}
 
+        {restroomsLoading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+            <Text style={styles.loadingOverlayText}>Loading…</Text>
+          </View>
+        )}
+
+        {/* Recenter button */}
         {lat !== null && lng !== null && (
           <TouchableOpacity
             style={styles.recenterBtn}
@@ -178,6 +246,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconBtnText: { fontSize: 18 },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.sm,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    zIndex: 10,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: Theme.radius.pill,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: Theme.spacing.md,
+    height: 42,
+  },
+  searchBarFocused: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+  },
+  searchIcon: { fontSize: 15, marginRight: Theme.spacing.sm },
+  searchInput: {
+    flex: 1,
+    fontSize: Theme.typography.fontSizeBase,
+    color: Colors.textPrimary,
+    paddingVertical: 0,
+  },
+  clearBtn: { padding: 4 },
+  clearBtnText: { fontSize: 12, color: Colors.textHint },
+  searchSpinner: { marginLeft: Theme.spacing.sm },
   mapContainer: { flex: 1 },
   centered: {
     flex: 1,
@@ -216,6 +319,21 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   toggleTextActive: { color: '#fff' },
+  countBadge: {
+    position: 'absolute',
+    top: Theme.spacing.lg,
+    left: Theme.spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: Theme.radius.pill,
+    paddingHorizontal: Theme.spacing.md,
+    paddingVertical: 5,
+    ...Theme.shadow.sm,
+  },
+  countBadgeText: {
+    fontSize: Theme.typography.fontSizeSM,
+    color: Colors.primary,
+    fontWeight: Theme.typography.weightSemibold,
+  },
   loadingOverlay: {
     position: 'absolute',
     bottom: Theme.spacing.xl,
@@ -224,7 +342,14 @@ const styles = StyleSheet.create({
     borderRadius: Theme.radius.pill,
     paddingHorizontal: Theme.spacing.lg,
     paddingVertical: Theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.sm,
     ...Theme.shadow.sm,
+  },
+  loadingOverlayText: {
+    fontSize: Theme.typography.fontSizeSM,
+    color: Colors.textHint,
   },
   recenterBtn: {
     position: 'absolute',
