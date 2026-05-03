@@ -21,13 +21,8 @@ import { geocodeAddress } from '../../services/geocodingService';
 
 type Props = NativeStackScreenProps<ExploreStackParamList, 'Map'>;
 
-const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
-
-function buildEmbedUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/embed/v1/view?key=${MAPS_KEY}&center=${lat},${lng}&zoom=15`;
-}
-
 export function MapScreen({ navigation }: Props) {
+  const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
   const { lat, lng, loading: locLoading } = useLocation();
   const [center, setCenter] = useState({ lat: 37.7749, lng: -122.4194 });
   const locationInitialized = useRef(false);
@@ -119,7 +114,7 @@ export function MapScreen({ navigation }: Props) {
         ) : (
           <WebView
             style={StyleSheet.absoluteFill}
-            source={{ uri: buildEmbedUrl(center.lat, center.lng) }}
+            source={{ uri: `https://www.google.com/maps/embed/v1/view?key=${mapsKey}&center=${center.lat},${center.lng}&zoom=15` }}
             javaScriptEnabled
             startInLoadingState
             renderLoading={() => (
