@@ -114,7 +114,7 @@ export function MapScreen({ navigation }: Props) {
         ) : (
           <WebView
             style={StyleSheet.absoluteFill}
-            source={{ uri: `https://www.google.com/maps/embed/v1/view?key=${mapsKey}&center=${center.lat},${center.lng}&zoom=15` }}
+            source={{ uri: `https://www.google.com/maps/embed/v1/view?key=AIzaSyDYvT06kPf64S-F_k1YBn0FeF-q0ikzxXM&center=${center.lat},${center.lng}&zoom=15` }}
             javaScriptEnabled
             startInLoadingState
             renderLoading={() => (
