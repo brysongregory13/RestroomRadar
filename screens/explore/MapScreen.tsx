@@ -114,7 +114,7 @@ export function MapScreen({ navigation }: Props) {
         ) : (
           <WebView
             style={StyleSheet.absoluteFill}
-            source={{ uri: `https://www.google.com/maps/embed/v1/view?key=AIzaSyBe1gYpo04xF3oUM_wiWOolwy63Vf9LoaQ&center=${center.lat},${center.lng}&zoom=15` }}
+            source={{ html: `<html><head><meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no'><style>*{margin:0;padding:0;}html,body{width:100%;height:100%;}</style></head><body><iframe width='100%' height='100%' style='border:0;' src='https://www.google.com/maps/embed/v1/view?key=AIzaSyBe1gYpo04xF3oUM_wiWOolwy63Vf9LoaQ&center=${center.lat},${center.lng}&zoom=15' allowfullscreen></iframe></body></html>` }}
             javaScriptEnabled
             startInLoadingState
             renderLoading={() => (
