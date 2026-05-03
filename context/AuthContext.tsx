@@ -6,6 +6,8 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   updateProfile,
+  setPersistence,
+  inMemoryPersistence,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
@@ -15,7 +17,7 @@ interface AuthContextType {
   user: User | null;
   appUser: AppUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   logOut: () => Promise<void>;
 }
@@ -53,7 +55,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, []);
 
-  async function signIn(email: string, password: string) {
+  async function signIn(email: string, password: string, keepSignedIn = false) {
+    try {
+      if (keepSignedIn) {
+        // getReactNativePersistence is available at runtime via the React Native bundle
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getReactNativePersistence } = require('firebase/auth');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await setPersistence(auth, getReactNativePersistence(AsyncStorage));
+      } else {
+        await setPersistence(auth, inMemoryPersistence);
+      }
+    } catch {
+      // persistence change not supported, proceed with current
+    }
     await signInWithEmailAndPassword(auth, email, password);
   }
 

@@ -91,3 +91,10 @@ export async function addRestroom(
   });
   return ref.id;
 }
+
+export async function getRestroomsByUser(uid: string): Promise<Restroom[]> {
+  const ref = collection(db, 'restrooms');
+  const q = query(ref, where('addedBy', '==', uid), orderBy('createdAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => docToRestroom(d as QueryDocumentSnapshot));
+}

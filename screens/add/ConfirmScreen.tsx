@@ -8,7 +8,21 @@ import { Theme } from '../../constants/Theme';
 
 type Props = NativeStackScreenProps<AddStackParamList, 'Confirm'>;
 
-export function ConfirmScreen({ navigation }: Props) {
+export function ConfirmScreen({ navigation, route }: Props) {
+  const { restroomLat, restroomLng } = route.params;
+
+  function handleViewOnMap() {
+    if (restroomLat !== undefined && restroomLng !== undefined) {
+      // Navigate to Explore tab > Map screen, passing re-center params
+      (navigation.getParent() as any)?.navigate('Explore', {
+        screen: 'Map',
+        params: { centerLat: restroomLat, centerLng: restroomLng },
+      });
+    } else {
+      (navigation.getParent() as any)?.navigate('Explore');
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -20,10 +34,7 @@ export function ConfirmScreen({ navigation }: Props) {
           Thank you for contributing to the community. Your submission helps others find clean
           restrooms nearby.
         </Text>
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={() => navigation.getParent()?.navigate('Explore')}
-        >
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleViewOnMap}>
           <Text style={styles.primaryBtnText}>View on Map</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('AddRestroom')}>

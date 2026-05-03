@@ -21,7 +21,8 @@ function applyFilters(restrooms: Restroom[], filters: Filters): Restroom[] {
 export function useNearbyRestrooms(
   lat: number | null,
   lng: number | null,
-  filters: Filters
+  filters: Filters,
+  refreshKey?: number
 ) {
   const [restrooms, setRestrooms] = useState<Restroom[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,7 +48,7 @@ export function useNearbyRestrooms(
     if (lat !== null && lng !== null) {
       fetch(lat, lng);
     }
-  }, [lat, lng, fetch]);
+  }, [lat, lng, fetch, refreshKey]);
 
   return { restrooms, loading, error, refetch: fetch };
 }

@@ -6,7 +6,7 @@ export type AuthStackParamList = {
 };
 
 export type ExploreStackParamList = {
-  Map: undefined;
+  Map: { centerLat?: number; centerLng?: number } | undefined;
   List: undefined;
   Detail: { id: string };
   Report: { id: string };
@@ -16,7 +16,7 @@ export type ExploreStackParamList = {
 export type AddStackParamList = {
   AuthGate: undefined;
   AddRestroom: undefined;
-  Confirm: { mode: 'add' | 'report' | 'edit' };
+  Confirm: { mode: 'add' | 'report' | 'edit'; restroomLat?: number; restroomLng?: number };
 };
 
 export type RouteStackParamList = {

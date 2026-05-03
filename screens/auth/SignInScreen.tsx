@@ -22,13 +22,14 @@ export function SignInScreen({ navigation }: Props) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [keepSignedIn, setKeepSignedIn] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSignIn() {
     if (!email || !password) return;
     setLoading(true);
     try {
-      await signIn(email, password);
+      await signIn(email, password, keepSignedIn);
     } catch (e: unknown) {
       Alert.alert('Sign In Failed', e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -61,6 +62,17 @@ export function SignInScreen({ navigation }: Props) {
         value={password}
         onChangeText={setPassword}
       />
+
+      <TouchableOpacity
+        style={styles.checkboxRow}
+        onPress={() => setKeepSignedIn(!keepSignedIn)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.checkbox, keepSignedIn && styles.checkboxChecked]}>
+          {keepSignedIn && <Text style={styles.checkmark}>✓</Text>}
+        </View>
+        <Text style={styles.checkboxLabel}>Keep me signed in</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.primaryBtn} onPress={handleSignIn} disabled={loading}>
         {loading ? (
@@ -108,12 +120,42 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginBottom: Theme.spacing.md,
   },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Theme.spacing.lg,
+    marginTop: Theme.spacing.xs,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Theme.spacing.sm,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  checkboxLabel: {
+    fontSize: Theme.typography.fontSizeBase,
+    color: Colors.textPrimary,
+  },
   primaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: Theme.radius.pill,
     paddingVertical: 15,
     alignItems: 'center',
-    marginTop: Theme.spacing.sm,
     marginBottom: Theme.spacing.lg,
   },
   primaryBtnText: {

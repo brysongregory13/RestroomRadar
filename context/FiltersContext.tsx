@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useReducer, useState } from 'react';
 import { Gender, AccessType, Amenity } from '../types/Restroom';
 
 export interface Filters {
@@ -8,7 +8,6 @@ export interface Filters {
   minRating: number;
   amenities: Amenity[];
   radiusMiles: number;
-  distanceUnit: 'mi' | 'km';
   darkMode: boolean;
 }
 
@@ -19,7 +18,6 @@ const defaultFilters: Filters = {
   minRating: 0,
   amenities: [],
   radiusMiles: 2,
-  distanceUnit: 'mi',
   darkMode: false,
 };
 
@@ -42,12 +40,15 @@ interface FiltersContextType {
   filters: Filters;
   setFilters: (updates: Partial<Filters>) => void;
   resetFilters: () => void;
+  refreshKey: number;
+  triggerRefresh: () => void;
 }
 
 const FiltersContext = createContext<FiltersContextType | null>(null);
 
 export function FiltersProvider({ children }: { children: React.ReactNode }) {
   const [filters, dispatch] = useReducer(reducer, defaultFilters);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   function setFilters(updates: Partial<Filters>) {
     dispatch({ type: 'SET_FILTERS', payload: updates });
@@ -57,8 +58,12 @@ export function FiltersProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'RESET' });
   }
 
+  function triggerRefresh() {
+    setRefreshKey((k) => k + 1);
+  }
+
   return (
-    <FiltersContext.Provider value={{ filters, setFilters, resetFilters }}>
+    <FiltersContext.Provider value={{ filters, setFilters, resetFilters, refreshKey, triggerRefresh }}>
       {children}
     </FiltersContext.Provider>
   );
