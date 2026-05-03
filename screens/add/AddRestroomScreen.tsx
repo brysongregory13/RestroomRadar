@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import MapView, { Marker } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
+import type { WebViewMessageEvent } from 'react-native-webview';
 import { AddStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation } from '../../hooks/useLocation';
@@ -25,6 +26,70 @@ import { Theme } from '../../constants/Theme';
 import { Gender, AccessType, Amenity } from '../../types/Restroom';
 
 type Props = NativeStackScreenProps<AddStackParamList, 'AddRestroom'>;
+
+const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
+
+function buildPickerHtml(lat: number, lng: number): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #f5f7f5; }
+    #map { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map, marker;
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: ${lat}, lng: ${lng} },
+        zoom: 16,
+        disableDefaultUI: true,
+        gestureHandling: 'cooperative',
+      });
+
+      marker = new google.maps.Marker({
+        position: { lat: ${lat}, lng: ${lng} },
+        map: map,
+        draggable: true,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 11,
+          fillColor: '#00897B',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 2,
+        }
+      });
+
+      marker.addListener('dragend', function() {
+        var pos = marker.getPosition();
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'location_update', lat: pos.lat(), lng: pos.lng() }));
+      });
+
+      map.addListener('click', function(e) {
+        marker.setPosition(e.latLng);
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'location_update', lat: e.latLng.lat(), lng: e.latLng.lng() }));
+      });
+
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'map_ready' }));
+    }
+
+    function moveMarker(lat, lng) {
+      var pos = { lat: lat, lng: lng };
+      marker.setPosition(pos);
+      map.panTo(pos);
+    }
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=initMap" async defer></script>
+</body>
+</html>`;
+}
 
 export function AddRestroomScreen({ navigation }: Props) {
   const { user } = useAuth();
@@ -43,6 +108,32 @@ export function AddRestroomScreen({ navigation }: Props) {
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+
+  const webviewRef = useRef<WebView>(null);
+  const pickerHtmlRef = useRef(buildPickerHtml(lat ?? 37.7749, lng ?? -122.4194));
+  const locationInitialized = useRef(false);
+
+  useEffect(() => {
+    if (lat !== null && lng !== null && mapReady && !locationInitialized.current) {
+      locationInitialized.current = true;
+      setPinLat(lat);
+      setPinLng(lng);
+      webviewRef.current?.injectJavaScript(`moveMarker(${lat}, ${lng}); true;`);
+    }
+  }, [lat, lng, mapReady]);
+
+  const handlePickerMessage = useCallback((event: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === 'location_update') {
+        setPinLat(msg.lat);
+        setPinLng(msg.lng);
+      } else if (msg.type === 'map_ready') {
+        setMapReady(true);
+      }
+    } catch {}
+  }, []);
 
   if (!user) {
     return <AuthGate onSignIn={() => {}} onSignUp={() => {}} message="Sign in to add a restroom." />;
@@ -86,21 +177,16 @@ export function AddRestroomScreen({ navigation }: Props) {
         <Text style={styles.title}>Add a Restroom</Text>
 
         <View style={styles.mapContainer}>
-          <MapView
+          <WebView
+            ref={webviewRef}
             style={styles.map}
-            initialRegion={{ latitude: pinLat, longitude: pinLng, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
-          >
-            <Marker
-              coordinate={{ latitude: pinLat, longitude: pinLng }}
-              draggable
-              onDragEnd={(e) => {
-                setPinLat(e.nativeEvent.coordinate.latitude);
-                setPinLng(e.nativeEvent.coordinate.longitude);
-              }}
-              pinColor={Colors.primary}
-            />
-          </MapView>
-          <Text style={styles.mapHint}>Drag the pin to the restroom location</Text>
+            source={{ html: pickerHtmlRef.current }}
+            onMessage={handlePickerMessage}
+            javaScriptEnabled
+            domStorageEnabled
+            scrollEnabled={false}
+          />
+          <Text style={styles.mapHint}>Tap map or drag pin to set location</Text>
         </View>
 
         <Field label="Name *">

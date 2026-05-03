@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Restroom } from '../types/Restroom';
 import { Colors } from '../constants/Colors';
 import { Theme } from '../constants/Theme';
@@ -15,11 +14,7 @@ export function RestroomPin({ restroom, label, onPress }: Props) {
   const color = restroom.isOpen && !restroom.isClosed ? Colors.primary : Colors.danger;
 
   return (
-    <Marker
-      coordinate={{ latitude: restroom.lat, longitude: restroom.lng }}
-      onPress={onPress}
-      tracksViewChanges={false}
-    >
+    <TouchableOpacity onPress={onPress}>
       <View style={[styles.pin, { backgroundColor: color }]}>
         {label ? (
           <Text style={styles.label}>{label}</Text>
@@ -28,7 +23,7 @@ export function RestroomPin({ restroom, label, onPress }: Props) {
         )}
       </View>
       <View style={[styles.tip, { borderTopColor: color }]} />
-    </Marker>
+    </TouchableOpacity>
   );
 }
 
