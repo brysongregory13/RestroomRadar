@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import type { WebViewMessageEvent } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ExploreStackParamList } from '../../navigation/types';
@@ -18,157 +17,34 @@ import { useNearbyRestrooms } from '../../hooks/useNearbyRestrooms';
 import { useFilters } from '../../context/FiltersContext';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
-import { distanceMiles } from '../../services/geoService';
 import { geocodeAddress } from '../../services/geocodingService';
 
 type Props = NativeStackScreenProps<ExploreStackParamList, 'Map'>;
 
 const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
-const PAN_THRESHOLD_MILES = 0.5;
 
-function buildMapHtml(lat: number, lng: number): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    * { margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; background: #f5f7f5; }
-    #map { width: 100%; height: 100%; }
-  </style>
-</head>
-<body>
-  <div id="map"></div>
-  <script>
-    var map, markers = [];
-
-    function initMap() {
-      map = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: ${lat}, lng: ${lng} },
-        zoom: 14,
-        disableDefaultUI: true,
-        zoomControl: true,
-        gestureHandling: 'greedy',
-      });
-
-      new google.maps.Marker({
-        position: { lat: ${lat}, lng: ${lng} },
-        map: map,
-        zIndex: 999,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: '#4285F4',
-          fillOpacity: 1,
-          strokeColor: '#fff',
-          strokeWeight: 2.5,
-        }
-      });
-
-      var lastLat = ${lat}, lastLng = ${lng};
-      map.addListener('idle', function() {
-        var c = map.getCenter();
-        var lat = c.lat(), lng = c.lng();
-        var d = Math.sqrt(Math.pow(lat - lastLat, 2) + Math.pow(lng - lastLng, 2));
-        if (d > 0.005) {
-          lastLat = lat; lastLng = lng;
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'region_change', lat: lat, lng: lng }));
-        }
-      });
-
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'map_ready' }));
-    }
-
-    function updateMarkers(restrooms) {
-      markers.forEach(function(m) { m.setMap(null); });
-      markers = [];
-      restrooms.forEach(function(r) {
-        var m = new google.maps.Marker({
-          position: { lat: r.lat, lng: r.lng },
-          map: map,
-          title: r.name,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 11,
-            fillColor: r.isOpen ? '#00897B' : '#E53935',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
-          }
-        });
-        (function(id) {
-          m.addListener('click', function() {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'pin_tap', id: id }));
-          });
-        })(r.id);
-        markers.push(m);
-      });
-    }
-
-    function panTo(lat, lng) {
-      map.panTo({ lat: lat, lng: lng });
-    }
-  </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=initMap" async defer></script>
-</body>
-</html>`;
+function buildEmbedUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/embed/v1/view?key=${MAPS_KEY}&center=${lat},${lng}&zoom=15`;
 }
 
 export function MapScreen({ navigation }: Props) {
   const { lat, lng, loading: locLoading } = useLocation();
-  const { filters } = useFilters();
-  const { restrooms, loading: restroomsLoading, refetch } = useNearbyRestrooms(lat, lng, filters);
+  const [center, setCenter] = useState({ lat: 37.7749, lng: -122.4194 });
+  const locationInitialized = useRef(false);
 
-  const webviewRef = useRef<WebView>(null);
-  const lastFetchCenter = useRef<{ lat: number; lng: number } | null>(null);
-  const [mapReady, setMapReady] = useState(false);
+  const { filters } = useFilters();
+  const { restrooms, loading: restroomsLoading } = useNearbyRestrooms(center.lat, center.lng, filters);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const mapLat = lat ?? 37.7749;
-  const mapLng = lng ?? -122.4194;
-
   useEffect(() => {
-    if (!mapReady || !webviewRef.current) return;
-    const data = restrooms.map((r) => ({
-      id: r.id,
-      lat: r.lat,
-      lng: r.lng,
-      name: r.name,
-      isOpen: r.isOpen && !r.isClosed,
-    }));
-    webviewRef.current.injectJavaScript(`updateMarkers(${JSON.stringify(data)}); true;`);
-  }, [restrooms, mapReady]);
-
-  const handleMessage = useCallback(
-    (event: WebViewMessageEvent) => {
-      try {
-        const msg = JSON.parse(event.nativeEvent.data);
-        if (msg.type === 'map_ready') {
-          setMapReady(true);
-        } else if (msg.type === 'pin_tap') {
-          navigation.push('Detail', { id: msg.id });
-        } else if (msg.type === 'region_change') {
-          if (!lastFetchCenter.current) {
-            lastFetchCenter.current = { lat: msg.lat, lng: msg.lng };
-            return;
-          }
-          const dist = distanceMiles(
-            lastFetchCenter.current.lat,
-            lastFetchCenter.current.lng,
-            msg.lat,
-            msg.lng
-          );
-          if (dist >= PAN_THRESHOLD_MILES) {
-            lastFetchCenter.current = { lat: msg.lat, lng: msg.lng };
-            refetch(msg.lat, msg.lng);
-          }
-        }
-      } catch {}
-    },
-    [navigation, refetch]
-  );
+    if (lat !== null && lng !== null && !locationInitialized.current) {
+      locationInitialized.current = true;
+      setCenter({ lat, lng });
+    }
+  }, [lat, lng]);
 
   async function handleSearch() {
     if (!searchQuery.trim()) return;
@@ -176,8 +52,7 @@ export function MapScreen({ navigation }: Props) {
     try {
       const result = await geocodeAddress(searchQuery.trim());
       if (result) {
-        webviewRef.current?.injectJavaScript(`panTo(${result.lat}, ${result.lng}); true;`);
-        refetch(result.lat, result.lng);
+        setCenter({ lat: result.lat, lng: result.lng });
         setSearchQuery(result.formattedAddress);
       }
     } finally {
@@ -243,12 +118,9 @@ export function MapScreen({ navigation }: Props) {
           </View>
         ) : (
           <WebView
-            ref={webviewRef}
             style={StyleSheet.absoluteFill}
-            source={{ html: buildMapHtml(mapLat, mapLng) }}
-            onMessage={handleMessage}
+            source={{ uri: buildEmbedUrl(center.lat, center.lng) }}
             javaScriptEnabled
-            domStorageEnabled
             startInLoadingState
             renderLoading={() => (
               <View style={[StyleSheet.absoluteFill, styles.centered]}>
@@ -270,7 +142,7 @@ export function MapScreen({ navigation }: Props) {
           </View>
         </View>
 
-        {/* Pin count badge */}
+        {/* Nearby count badge */}
         {!restroomsLoading && restrooms.length > 0 && (
           <View style={styles.countBadge}>
             <Text style={styles.countBadgeText}>{restrooms.length} nearby</Text>
@@ -288,7 +160,7 @@ export function MapScreen({ navigation }: Props) {
         {lat !== null && lng !== null && (
           <TouchableOpacity
             style={styles.recenterBtn}
-            onPress={() => webviewRef.current?.injectJavaScript(`panTo(${lat}, ${lng}); true;`)}
+            onPress={() => setCenter({ lat, lng })}
           >
             <Text style={styles.recenterIcon}>⊕</Text>
           </TouchableOpacity>
