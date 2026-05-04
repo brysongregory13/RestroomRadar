@@ -22,10 +22,16 @@ export function ProfileScreen({ navigation }: Props) {
 
   useEffect(() => {
     if (!user) return;
+    console.log('[ProfileScreen] fetching submissions for uid:', user.uid);
     setSubmissionsLoading(true);
     getRestroomsByUser(user.uid)
-      .then(setSubmissions)
-      .catch(() => {})
+      .then((results) => {
+        console.log('[ProfileScreen] submissions received:', results.length);
+        setSubmissions(results);
+      })
+      .catch((e) => {
+        console.log('[ProfileScreen] submissions error:', e?.message ?? e);
+      })
       .finally(() => setSubmissionsLoading(false));
   }, [user?.uid]);
 
