@@ -12,7 +12,7 @@ export interface Filters {
 }
 
 const defaultFilters: Filters = {
-  openNowOnly: true,
+  openNowOnly: false,
   gender: [],
   accessType: [],
   minRating: 0,

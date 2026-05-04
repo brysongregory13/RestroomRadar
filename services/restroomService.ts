@@ -76,28 +76,60 @@ export function subscribeNearbyRestrooms(
   onData: (restrooms: Restroom[], allShardsReady: boolean) => void,
   onError: (e: Error) => void
 ): () => void {
+  console.log(`[subscribeNearbyRestrooms] lat=${lat} lng=${lng} radius=${radiusMiles}mi`);
+
   const bounds = getGeohashBounds(lat, lng, radiusMiles);
+  console.log(`[subscribeNearbyRestrooms] geohash bounds count: ${bounds.length}`);
+  bounds.forEach(([s, e], i) => console.log(`  bound[${i}]: "${s}" → "${e}"`));
+
   const ref = collection(db, 'restrooms');
 
   // Each geohash bound gets its own shard Map to track which docs belong to it
   const shards = bounds.map(() => new Map<string, Restroom>());
   const shardsReady = new Set<number>();
+  let fallbackActivated = false;
 
   function emit() {
     const merged = new Map<string, Restroom>();
     shards.forEach((shard) => shard.forEach((r, id) => merged.set(id, r)));
-    onData(Array.from(merged.values()), shardsReady.size >= bounds.length);
+    const allReady = shardsReady.size >= bounds.length;
+
+    console.log(
+      `[subscribeNearbyRestrooms] emit: shardsReady=${shardsReady.size}/${bounds.length} merged=${merged.size}`
+    );
+
+    if (allReady && merged.size === 0 && !fallbackActivated) {
+      // Geo query found nothing — either restrooms lack a geohash field or the
+      // user is outside the stored locations. Fall back to reading the full collection.
+      fallbackActivated = true;
+      console.log('[subscribeNearbyRestrooms] geo returned 0 — falling back to full collection read');
+      getDocs(ref)
+        .then((snap) => {
+          console.log(`[subscribeNearbyRestrooms] fallback returned ${snap.docs.length} docs`);
+          const all = snap.docs.map((d) => docToRestroom(d as QueryDocumentSnapshot));
+          onData(all, true);
+        })
+        .catch((e) => onError(e instanceof Error ? e : new Error(String(e))));
+    } else {
+      onData(Array.from(merged.values()), allReady);
+    }
   }
 
   const unsubscribers = bounds.map(([start, end], idx) => {
     const q = query(ref, where('geohash', '>=', start), where('geohash', '<=', end));
+    console.log(`[subscribeNearbyRestrooms] attaching onSnapshot for bound[${idx}]`);
     return onSnapshot(
       q,
       (snap) => {
+        console.log(
+          `[subscribeNearbyRestrooms] snapshot bound[${idx}]: ${snap.size} docs, ${snap.docChanges().length} changes`
+        );
         snap.docChanges().forEach((change) => {
           if (change.type === 'added' || change.type === 'modified') {
             const r = docToRestroom(change.doc as QueryDocumentSnapshot);
-            if (distanceMiles(lat, lng, r.lat, r.lng) <= radiusMiles) {
+            const dist = distanceMiles(lat, lng, r.lat, r.lng);
+            console.log(`  ${change.type} "${r.name}" geohash="${r.geohash}" dist=${dist.toFixed(2)}mi`);
+            if (dist <= radiusMiles) {
               shards[idx].set(change.doc.id, r);
             } else {
               shards[idx].delete(change.doc.id);
@@ -109,7 +141,10 @@ export function subscribeNearbyRestrooms(
         shardsReady.add(idx);
         emit();
       },
-      (e) => onError(e instanceof Error ? e : new Error(String(e)))
+      (e) => {
+        console.log(`[subscribeNearbyRestrooms] onSnapshot error bound[${idx}]:`, e);
+        onError(e instanceof Error ? e : new Error(String(e)));
+      }
     );
   });
 

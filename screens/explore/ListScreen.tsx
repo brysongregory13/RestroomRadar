@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -30,8 +31,8 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 export function ListScreen({ navigation }: Props) {
   const { lat, lng } = useLocation();
-  const { filters } = useFilters();
-  const { restrooms } = useNearbyRestrooms(lat, lng, filters);
+  const { filters, refreshKey } = useFilters();
+  const { restrooms, loading, error } = useNearbyRestrooms(lat, lng, filters, refreshKey);
   const [sort, setSort] = useState<SortKey>('closest');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -115,6 +116,19 @@ export function ListScreen({ navigation }: Props) {
           {sorted.length} result{sorted.length !== 1 ? 's' : ''}
         </Text>
       </View>
+
+      {loading && (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading restrooms…</Text>
+        </View>
+      )}
+
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>⚠️ {error}</Text>
+        </View>
+      ) : null}
 
       <FlatList
         data={sorted}
@@ -238,6 +252,25 @@ const styles = StyleSheet.create({
     color: Colors.textHint,
     marginLeft: 'auto',
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Theme.spacing.sm,
+    gap: Theme.spacing.sm,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  loadingText: { fontSize: Theme.typography.fontSizeSM, color: Colors.textHint },
+  errorBanner: {
+    backgroundColor: '#FFF3F3',
+    paddingHorizontal: Theme.spacing.lg,
+    paddingVertical: Theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFCCCC',
+  },
+  errorText: { fontSize: Theme.typography.fontSizeSM, color: Colors.danger },
   empty: { alignItems: 'center', marginTop: 60, paddingHorizontal: Theme.spacing.xl },
   emptyIcon: { fontSize: 48, marginBottom: Theme.spacing.md },
   emptyText: {

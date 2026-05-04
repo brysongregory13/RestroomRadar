@@ -28,19 +28,21 @@ export function useNearbyRestrooms(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep a ref to the latest filters so snapshot callbacks always apply current filters
-  // even when the subscription hasn't been recreated (e.g. only openNowOnly changed)
+  // Always-current ref so snapshot callbacks never use stale filter values
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
-  // Raw data from Firestore — updated by the subscription callback
+  // Raw Firestore results before client-side filtering
   const rawRef = useRef<Restroom[]>([]);
 
-  // Re-subscribe when position or radius changes (requires a new geohash query).
-  // refreshKey forces a full re-subscribe (e.g. after adding a restroom).
+  // Re-subscribe when position, radius, or refreshKey changes
   useEffect(() => {
-    if (lat === null || lng === null) return;
+    if (lat === null || lng === null) {
+      console.log('[useNearbyRestrooms] waiting for location (lat/lng is null)');
+      return;
+    }
 
+    console.log(`[useNearbyRestrooms] subscribing — lat=${lat} lng=${lng} radius=${filtersRef.current.radiusMiles}mi refreshKey=${refreshKey}`);
     setLoading(true);
     setError(null);
     rawRef.current = [];
@@ -50,11 +52,15 @@ export function useNearbyRestrooms(
       lng,
       filtersRef.current.radiusMiles,
       (raw, allShardsReady) => {
+        console.log(`[useNearbyRestrooms] received ${raw.length} raw docs, allReady=${allShardsReady}`);
         rawRef.current = raw;
-        setRestrooms(applyFilters(raw, filtersRef.current));
+        const filtered = applyFilters(raw, filtersRef.current);
+        console.log(`[useNearbyRestrooms] after client filters: ${filtered.length} restrooms (openNowOnly=${filtersRef.current.openNowOnly})`);
+        setRestrooms(filtered);
         if (allShardsReady) setLoading(false);
       },
       (e) => {
+        console.log('[useNearbyRestrooms] subscription error:', e.message);
         setError(e.message);
         setLoading(false);
       }
@@ -64,10 +70,11 @@ export function useNearbyRestrooms(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lng, filters.radiusMiles, refreshKey]);
 
-  // When non-radius filters change, re-apply them to the current raw data without
-  // re-subscribing to Firestore.
+  // Re-apply client-side filters without tearing down Firestore subscription
   useEffect(() => {
-    setRestrooms(applyFilters(rawRef.current, filters));
+    const filtered = applyFilters(rawRef.current, filters);
+    console.log(`[useNearbyRestrooms] filter re-apply: ${filtered.length} restrooms from ${rawRef.current.length} raw`);
+    setRestrooms(filtered);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.openNowOnly, filters.gender, filters.accessType, filters.minRating, filters.amenities]);
 
