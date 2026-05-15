@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Review } from '../types/Review';
+import { markHelpful } from '../services/reviewService';
 import { StarRating } from './StarRating';
 import { Colors } from '../constants/Colors';
 import { Theme } from '../constants/Theme';
@@ -13,15 +14,30 @@ function timeAgo(date: Date): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+  return `${Math.floor(days / 30)}mo ago`;
 }
 
 interface Props {
   review: Review;
+  restroomId: string;
 }
 
-export function ReviewItem({ review }: Props) {
+export function ReviewItem({ review, restroomId }: Props) {
+  const [helpfulCount, setHelpfulCount] = useState(review.helpfulCount);
+  const [voted, setVoted] = useState(false);
+  const [voting, setVoting] = useState(false);
+
+  async function handleHelpful() {
+    if (voted || voting) return;
+    setVoting(true);
+    try {
+      await markHelpful(restroomId, review.id);
+      setHelpfulCount((c) => c + 1);
+      setVoted(true);
+    } catch {}
+    setVoting(false);
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -37,6 +53,21 @@ export function ReviewItem({ review }: Props) {
         </View>
       </View>
       {review.text ? <Text style={styles.text}>{review.text}</Text> : null}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.helpfulBtn, voted && styles.helpfulBtnVoted]}
+          onPress={handleHelpful}
+          disabled={voted || voting}
+        >
+          {voting ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <Text style={[styles.helpfulText, voted && styles.helpfulTextVoted]}>
+              👍 Helpful{helpfulCount > 0 ? ` (${helpfulCount})` : ''}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -57,26 +88,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: Theme.spacing.sm,
   },
-  avatarText: {
-    fontSize: Theme.typography.fontSizeMD,
-    color: Colors.primary,
-    fontWeight: Theme.typography.weightBold,
-  },
+  avatarText: { fontSize: Theme.typography.fontSizeMD, color: Colors.primary, fontWeight: Theme.typography.weightBold },
   meta: { flex: 1 },
-  name: {
-    fontSize: Theme.typography.fontSizeBase,
-    fontWeight: Theme.typography.weightSemibold,
-    color: Colors.textPrimary,
-  },
+  name: { fontSize: Theme.typography.fontSizeBase, fontWeight: Theme.typography.weightSemibold, color: Colors.textPrimary },
   ratingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  time: {
-    fontSize: Theme.typography.fontSizeXS,
-    color: Colors.textHint,
-    marginLeft: Theme.spacing.sm,
+  time: { fontSize: Theme.typography.fontSizeXS, color: Colors.textHint, marginLeft: Theme.spacing.sm },
+  text: { fontSize: Theme.typography.fontSizeBase, color: Colors.textSecondary, lineHeight: 20 },
+  footer: { marginTop: Theme.spacing.sm, flexDirection: 'row' },
+  helpfulBtn: {
+    paddingHorizontal: Theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Theme.radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  text: {
-    fontSize: Theme.typography.fontSizeBase,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-  },
+  helpfulBtnVoted: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
+  helpfulText: { fontSize: Theme.typography.fontSizeXS, color: Colors.textHint },
+  helpfulTextVoted: { color: Colors.primary, fontWeight: Theme.typography.weightSemibold },
 });

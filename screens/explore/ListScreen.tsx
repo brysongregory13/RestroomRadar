@@ -14,6 +14,8 @@ import { ExploreStackParamList } from '../../navigation/types';
 import { useLocation } from '../../hooks/useLocation';
 import { useNearbyRestrooms } from '../../hooks/useNearbyRestrooms';
 import { useFilters } from '../../context/FiltersContext';
+import { useMapContext } from '../../context/MapContext';
+import { useFavorites } from '../../hooks/useFavorites';
 import { RestroomCard } from '../../components/RestroomCard';
 import { Restroom } from '../../types/Restroom';
 import { distanceMiles } from '../../services/geoService';
@@ -32,7 +34,13 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 export function ListScreen({ navigation }: Props) {
   const { lat, lng } = useLocation();
   const { filters, refreshKey } = useFilters();
-  const { restrooms, loading, error } = useNearbyRestrooms(lat, lng, filters, refreshKey);
+  const { mapRestrooms } = useMapContext();
+  const { favoriteIds, toggleFavorite } = useFavorites();
+
+  // Fall back to own query when MapContext is empty (e.g., user navigated directly to List)
+  const { restrooms: ownRestrooms, loading, error } = useNearbyRestrooms(lat, lng, filters, refreshKey);
+  const restrooms = mapRestrooms.length > 0 ? mapRestrooms : ownRestrooms;
+
   const [sort, setSort] = useState<SortKey>('closest');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -141,6 +149,8 @@ export function ListScreen({ navigation }: Props) {
                 ? distanceMiles(lat, lng, item.lat, item.lng)
                 : undefined
             }
+            isFavorited={favoriteIds.has(item.id)}
+            onToggleFavorite={() => toggleFavorite(item.id)}
             onPress={() => navigation.push('Detail', { id: item.id })}
           />
         )}

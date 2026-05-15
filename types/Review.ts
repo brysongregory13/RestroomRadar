@@ -4,5 +4,6 @@ export interface Review {
   displayName: string;
   rating: number;
   text: string;
+  helpfulCount: number;
   createdAt: Date;
 }

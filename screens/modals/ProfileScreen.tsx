@@ -6,19 +6,24 @@ import { RootStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useColors } from '../../context/ThemeContext';
 import { getRestroomsByUser } from '../../services/restroomService';
+import { getFavoriteRestrooms } from '../../services/favoritesService';
 import { Restroom } from '../../types/Restroom';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+type Tab = 'submissions' | 'saved';
 
 export function ProfileScreen({ navigation }: Props) {
   const { user, appUser, logOut } = useAuth();
   const C = useColors();
   const styles = useMemo(() => makeStyles(C), [C]);
 
+  const [tab, setTab] = useState<Tab>('submissions');
   const [submissions, setSubmissions] = useState<Restroom[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [savedRestrooms, setSavedRestrooms] = useState<Restroom[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -29,11 +34,25 @@ export function ProfileScreen({ navigation }: Props) {
         console.log('[ProfileScreen] submissions received:', results.length);
         setSubmissions(results);
       })
-      .catch((e) => {
-        console.log('[ProfileScreen] submissions error:', e?.message ?? e);
-      })
+      .catch((e) => console.log('[ProfileScreen] submissions error:', e?.message ?? e))
       .finally(() => setSubmissionsLoading(false));
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (tab !== 'saved' || !user) return;
+    setSavedLoading(true);
+    getFavoriteRestrooms(user.uid)
+      .then(setSavedRestrooms)
+      .catch((e) => console.log('[ProfileScreen] favorites error:', e?.message ?? e))
+      .finally(() => setSavedLoading(false));
+  }, [tab, user?.uid]);
+
+  function navigateToRestroom(id: string) {
+    (navigation as any).navigate('Main', {
+      screen: 'Explore',
+      params: { screen: 'Detail', params: { id } },
+    });
+  }
 
   if (!user || !appUser) {
     return (
@@ -73,41 +92,67 @@ export function ProfileScreen({ navigation }: Props) {
           <StatCell label="Edits" value={appUser.editCount} C={C} />
         </View>
 
-        {/* My Submissions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>My Submissions</Text>
-          {submissionsLoading ? (
-            <ActivityIndicator color={C.primary} style={styles.loader} />
-          ) : submissions.length === 0 ? (
-            <Text style={styles.noSubmissions}>No submissions yet.</Text>
-          ) : (
-            submissions.map((r) => (
-              <TouchableOpacity
-                key={r.id}
-                style={styles.submissionItem}
-                onPress={() =>
-                  (navigation as any).navigate('Main', {
-                    screen: 'Explore',
-                    params: { screen: 'Detail', params: { id: r.id } },
-                  })
-                }
-              >
-                <View style={styles.submissionInfo}>
-                  <Text style={styles.submissionName} numberOfLines={1}>{r.name}</Text>
-                  {r.address ? (
-                    <Text style={styles.submissionAddress} numberOfLines={1}>{r.address}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.submissionMeta}>
-                  <Text style={styles.submissionDate}>
-                    {r.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </Text>
-                  <Text style={styles.submissionRating}>★ {r.avgRating.toFixed(1)}</Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tabBtn, tab === 'submissions' && styles.tabBtnActive]}
+            onPress={() => setTab('submissions')}
+          >
+            <Text style={[styles.tabBtnText, tab === 'submissions' && styles.tabBtnTextActive]}>
+              My Submissions
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabBtn, tab === 'saved' && styles.tabBtnActive]}
+            onPress={() => setTab('saved')}
+          >
+            <Text style={[styles.tabBtnText, tab === 'saved' && styles.tabBtnTextActive]}>
+              Saved ♥
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Submissions Tab */}
+        {tab === 'submissions' && (
+          <View style={styles.section}>
+            {submissionsLoading ? (
+              <ActivityIndicator color={C.primary} style={styles.loader} />
+            ) : submissions.length === 0 ? (
+              <Text style={styles.noItems}>No submissions yet.</Text>
+            ) : (
+              submissions.map((r) => (
+                <RestroomListItem
+                  key={r.id}
+                  restroom={r}
+                  onPress={() => navigateToRestroom(r.id)}
+                  styles={styles}
+                  C={C}
+                />
+              ))
+            )}
+          </View>
+        )}
+
+        {/* Saved Tab */}
+        {tab === 'saved' && (
+          <View style={styles.section}>
+            {savedLoading ? (
+              <ActivityIndicator color={C.primary} style={styles.loader} />
+            ) : savedRestrooms.length === 0 ? (
+              <Text style={styles.noItems}>No saved restrooms yet. Tap ♥ on any restroom to save it.</Text>
+            ) : (
+              savedRestrooms.map((r) => (
+                <RestroomListItem
+                  key={r.id}
+                  restroom={r}
+                  onPress={() => navigateToRestroom(r.id)}
+                  styles={styles}
+                  C={C}
+                />
+              ))
+            )}
+          </View>
+        )}
 
         <TouchableOpacity
           style={styles.signOutBtn}
@@ -120,6 +165,35 @@ export function ProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function RestroomListItem({
+  restroom,
+  onPress,
+  styles,
+  C,
+}: {
+  restroom: Restroom;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  C: ReturnType<typeof useColors>;
+}) {
+  return (
+    <TouchableOpacity style={styles.listItem} onPress={onPress}>
+      <View style={styles.listItemInfo}>
+        <Text style={styles.listItemName} numberOfLines={1}>{restroom.name}</Text>
+        {restroom.address ? (
+          <Text style={styles.listItemAddress} numberOfLines={1}>{restroom.address}</Text>
+        ) : null}
+      </View>
+      <View style={styles.listItemMeta}>
+        <Text style={styles.listItemDate}>
+          {restroom.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        </Text>
+        <Text style={styles.listItemRating}>★ {restroom.avgRating.toFixed(1)}</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -169,24 +243,41 @@ function makeStyles(C: ReturnType<typeof useColors>) {
       borderBottomWidth: 1,
       borderColor: C.border,
     },
-    section: {
-      marginTop: Theme.spacing.lg,
-      paddingHorizontal: Theme.spacing.lg,
+    tabs: {
+      flexDirection: 'row',
+      backgroundColor: C.surface,
+      marginTop: Theme.spacing.md,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: C.border,
     },
-    sectionTitle: {
-      fontSize: Theme.typography.fontSizeMD,
-      fontWeight: Theme.typography.weightBold,
-      color: C.textPrimary,
-      marginBottom: Theme.spacing.md,
+    tabBtn: {
+      flex: 1,
+      paddingVertical: Theme.spacing.md,
+      alignItems: 'center',
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    tabBtnActive: { borderBottomColor: C.primary },
+    tabBtnText: {
+      fontSize: Theme.typography.fontSizeSM,
+      fontWeight: Theme.typography.weightSemibold,
+      color: C.textHint,
+    },
+    tabBtnTextActive: { color: C.primary },
+    section: {
+      marginTop: Theme.spacing.sm,
+      paddingHorizontal: Theme.spacing.lg,
+      paddingBottom: Theme.spacing.md,
     },
     loader: { marginVertical: Theme.spacing.lg },
-    noSubmissions: {
+    noItems: {
       color: C.textHint,
       fontSize: Theme.typography.fontSizeBase,
       textAlign: 'center',
       paddingVertical: Theme.spacing.xl,
     },
-    submissionItem: {
+    listItem: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -194,23 +285,24 @@ function makeStyles(C: ReturnType<typeof useColors>) {
       borderRadius: Theme.radius.lg,
       padding: Theme.spacing.md,
       marginBottom: Theme.spacing.sm,
+      marginTop: Theme.spacing.sm,
       borderWidth: 1,
       borderColor: C.border,
     },
-    submissionInfo: { flex: 1, marginRight: Theme.spacing.md },
-    submissionName: {
+    listItemInfo: { flex: 1, marginRight: Theme.spacing.md },
+    listItemName: {
       fontSize: Theme.typography.fontSizeBase,
       fontWeight: Theme.typography.weightSemibold,
       color: C.textPrimary,
     },
-    submissionAddress: {
+    listItemAddress: {
       fontSize: Theme.typography.fontSizeSM,
       color: C.textHint,
       marginTop: 2,
     },
-    submissionMeta: { alignItems: 'flex-end' },
-    submissionDate: { fontSize: Theme.typography.fontSizeXS, color: C.textHint },
-    submissionRating: {
+    listItemMeta: { alignItems: 'flex-end' },
+    listItemDate: { fontSize: Theme.typography.fontSizeXS, color: C.textHint },
+    listItemRating: {
       fontSize: Theme.typography.fontSizeSM,
       color: Colors.accent,
       fontWeight: Theme.typography.weightBold,

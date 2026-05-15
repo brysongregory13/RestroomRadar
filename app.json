@@ -14,6 +14,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyBe1gYpo04xF3oUM_wiWOolwy63Vf9LoaQ"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "RestroomRadar needs your location to show nearby restrooms.",
         "NSCameraUsageDescription": "RestroomRadar needs camera access to upload restroom photos.",
@@ -27,6 +30,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBe1gYpo04xF3oUM_wiWOolwy63Vf9LoaQ"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -38,10 +46,23 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "RestroomRadar needs your location to show nearby restrooms."
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": "AIzaSyBe1gYpo04xF3oUM_wiWOolwy63Vf9LoaQ"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#00897B"
         }
       ]
     ]

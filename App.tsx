@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './context/AuthContext';
 import { FiltersProvider } from './context/FiltersContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { MapProvider } from './context/MapContext';
 import { AppNavigator } from './navigation/AppNavigator';
 
 export default function App() {
@@ -14,7 +15,9 @@ export default function App() {
         <AuthProvider>
           <FiltersProvider>
             <ThemeProvider>
-              <AppNavigator />
+              <MapProvider>
+                <AppNavigator />
+              </MapProvider>
             </ThemeProvider>
           </FiltersProvider>
         </AuthProvider>

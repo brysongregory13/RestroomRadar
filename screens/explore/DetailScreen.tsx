@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -17,14 +18,24 @@ import { Review } from '../../types/Review';
 import { getRestroomById } from '../../services/restroomService';
 import { getReviews, addReview } from '../../services/reviewService';
 import { useAuth } from '../../hooks/useAuth';
+import { useFavorites } from '../../hooks/useFavorites';
+import { useMapContext } from '../../context/MapContext';
 import { StarRating } from '../../components/StarRating';
 import { BadgePill } from '../../components/BadgePill';
 import { InfoCell } from '../../components/InfoCell';
 import { ReviewItem } from '../../components/ReviewItem';
+import { FavoriteButton } from '../../components/FavoriteButton';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
 
 type Props = NativeStackScreenProps<ExploreStackParamList, 'Detail'>;
+type ReviewSort = 'recent' | 'highest' | 'helpful';
+
+const REVIEW_SORT_OPTIONS: { key: ReviewSort; label: string }[] = [
+  { key: 'recent', label: 'Recent' },
+  { key: 'highest', label: 'Highest' },
+  { key: 'helpful', label: 'Helpful' },
+];
 
 const ACCESS_LABELS: Record<string, string> = {
   public: 'Public',
@@ -36,10 +47,13 @@ const ACCESS_LABELS: Record<string, string> = {
 export function DetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   const { user } = useAuth();
+  const { favoriteIds, toggleFavorite } = useFavorites();
+  const { setLastVisited } = useMapContext();
+
   const [restroom, setRestroom] = useState<Restroom | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [reviewSort, setReviewSort] = useState<ReviewSort>('recent');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -52,6 +66,22 @@ export function DetailScreen({ route, navigation }: Props) {
       setLoading(false);
     })();
   }, [id]);
+
+  // Set lastVisited in MapContext so MapScreen can prompt for a review
+  useEffect(() => {
+    return navigation.addListener('beforeRemove', () => {
+      if (restroom) {
+        setLastVisited({ id: restroom.id, name: restroom.name });
+      }
+    });
+  }, [navigation, restroom, setLastVisited]);
+
+  const sortedReviews = useMemo(() => {
+    const copy = [...reviews];
+    if (reviewSort === 'highest') return copy.sort((a, b) => b.rating - a.rating);
+    if (reviewSort === 'helpful') return copy.sort((a, b) => b.helpfulCount - a.helpfulCount);
+    return copy.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [reviews, reviewSort]);
 
   async function handleSubmitReview() {
     if (!user) {
@@ -77,6 +107,16 @@ export function DetailScreen({ route, navigation }: Props) {
     }
   }
 
+  async function handleShare() {
+    if (!restroom) return;
+    try {
+      await Share.share({
+        title: restroom.name,
+        message: `Check out ${restroom.name} on RestroomRadar!\n${restroom.address}`,
+      });
+    } catch {}
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -100,20 +140,35 @@ export function DetailScreen({ route, navigation }: Props) {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Photo banner */}
         <View style={styles.photoBanner}>
-          {restroom.photos.length > 0 ? (
-            <Text style={styles.photoPlaceholder}>📷</Text>
-          ) : (
-            <Text style={styles.photoPlaceholder}>🚻</Text>
-          )}
+          <Text style={styles.photoPlaceholder}>{restroom.photos.length > 0 ? '📷' : '🚻'}</Text>
         </View>
 
         <View style={styles.body}>
-          {/* Name & status */}
+          {/* Name, Favorite & Share row */}
           <View style={styles.nameRow}>
-            <Text style={styles.name}>{restroom.name}</Text>
+            <Text style={styles.name} numberOfLines={2}>{restroom.name}</Text>
+            <View style={styles.nameActions}>
+              <FavoriteButton
+                isFavorited={favoriteIds.has(id)}
+                onPress={() => toggleFavorite(id)}
+                size={22}
+              />
+              <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
+                <Text style={styles.shareBtnText}>⬆️</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Status & Address */}
+          <View style={styles.statusRow}>
             <Text style={[styles.status, { color: open ? Colors.success : Colors.danger }]}>
-              {open ? 'Open' : 'Closed'}
+              {open ? 'Open Now' : 'Closed'}
             </Text>
+            {restroom.reviewCount >= 3 && (
+              <View style={styles.verifiedBadge}>
+                <Text style={styles.verifiedText}>✓ Verified</Text>
+              </View>
+            )}
           </View>
           <Text style={styles.address}>{restroom.address}</Text>
 
@@ -230,11 +285,28 @@ export function DetailScreen({ route, navigation }: Props) {
 
           {/* Reviews */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Reviews ({reviews.length})</Text>
-            {reviews.length === 0 ? (
+            <View style={styles.reviewsHeader}>
+              <Text style={styles.sectionTitle}>Reviews ({reviews.length})</Text>
+              <View style={styles.sortTabs}>
+                {REVIEW_SORT_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.sortTab, reviewSort === opt.key && styles.sortTabActive]}
+                    onPress={() => setReviewSort(opt.key)}
+                  >
+                    <Text style={[styles.sortTabText, reviewSort === opt.key && styles.sortTabTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            {sortedReviews.length === 0 ? (
               <Text style={styles.noReviews}>No reviews yet. Be the first!</Text>
             ) : (
-              reviews.map((r) => <ReviewItem key={r.id} review={r} />)
+              sortedReviews.map((r) => (
+                <ReviewItem key={r.id} review={r} restroomId={id} />
+              ))
             )}
           </View>
         </View>
@@ -257,18 +329,42 @@ const styles = StyleSheet.create({
   body: { padding: Theme.spacing.lg },
   nameRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: 6,
+    gap: Theme.spacing.sm,
   },
   name: {
     flex: 1,
     fontSize: Theme.typography.fontSizeXL,
     fontWeight: Theme.typography.weightBold,
     color: Colors.textPrimary,
-    marginRight: Theme.spacing.sm,
+  },
+  nameActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.sm,
+    paddingTop: 4,
+  },
+  shareBtn: { padding: 4 },
+  shareBtnText: { fontSize: 20 },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.sm,
+    marginBottom: 4,
   },
   status: { fontSize: Theme.typography.fontSizeBase, fontWeight: Theme.typography.weightSemibold },
+  verifiedBadge: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: Theme.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  verifiedText: {
+    fontSize: Theme.typography.fontSizeXS,
+    color: '#2E7D32',
+    fontWeight: Theme.typography.weightBold,
+  },
   address: {
     fontSize: Theme.typography.fontSizeBase,
     color: Colors.textSecondary,
@@ -303,6 +399,27 @@ const styles = StyleSheet.create({
   },
   actionBtnOutline: { borderWidth: 1.5, borderColor: Colors.border },
   actionBtnText: { fontSize: Theme.typography.fontSizeBase, fontWeight: Theme.typography.weightSemibold },
+  reviewsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Theme.spacing.md,
+  },
+  sortTabs: { flexDirection: 'row', gap: 4 },
+  sortTab: {
+    paddingHorizontal: Theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Theme.radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  sortTabActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
+  sortTabText: {
+    fontSize: Theme.typography.fontSizeXS,
+    color: Colors.textHint,
+    fontWeight: Theme.typography.weightSemibold,
+  },
+  sortTabTextActive: { color: Colors.primary },
   noReviews: { color: Colors.textHint, fontStyle: 'italic' },
   reviewForm: { gap: Theme.spacing.md },
   reviewInput: {

@@ -6,6 +6,9 @@ import {
   getDocs,
   serverTimestamp,
   QueryDocumentSnapshot,
+  doc,
+  updateDoc,
+  increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Review } from '../types/Review';
@@ -18,6 +21,7 @@ function docToReview(d: QueryDocumentSnapshot): Review {
     displayName: data.displayName,
     rating: data.rating,
     text: data.text,
+    helpfulCount: data.helpfulCount ?? 0,
     createdAt: data.createdAt?.toDate() ?? new Date(),
   };
 }
@@ -43,6 +47,13 @@ export async function addReview(
     displayName,
     rating,
     text,
+    helpfulCount: 0,
     createdAt: serverTimestamp(),
+  });
+}
+
+export async function markHelpful(restroomId: string, reviewId: string): Promise<void> {
+  await updateDoc(doc(db, 'restrooms', restroomId, 'reviews', reviewId), {
+    helpfulCount: increment(1),
   });
 }
