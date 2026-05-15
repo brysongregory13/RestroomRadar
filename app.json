@@ -54,12 +54,6 @@
         }
       ],
       [
-        "react-native-maps",
-        {
-          "googleMapsApiKey": "AIzaSyBe1gYpo04xF3oUM_wiWOolwy63Vf9LoaQ"
-        }
-      ],
-      [
         "expo-notifications",
         {
           "color": "#00897B"
